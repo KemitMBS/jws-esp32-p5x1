@@ -31,8 +31,8 @@ void updateJadwal(DateTime now) {
     
     if(result.valid) {
         // Mapping hasil ke array pMnt (ditambah KWS & NIH)
-        pMnt[0] = result.imsak + kws[0];           
-        pMnt[1] = result.fajr + kws[1] + NIH;      
+        pMnt[0] = result.imsak + kws[0]; // KWS adalah koreksi waktu sholat           
+        pMnt[1] = result.fajr + kws[1] + NIH; // NIH adalah Nilai ihtiyat watu sholat
         pMnt[2] = result.sunrise + kws[2];         
         pMnt[3] = result.duha + kws[3];            
         pMnt[4] = result.dhuhr + kws[4] + NIH;     
@@ -75,5 +75,6 @@ void checkNextEvent(DateTime now) {
         nextEventSec = (long)(pMnt[0] * 60) - wibSec + 86400L; 
     }
 }
+
 
 #endif
