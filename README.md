@@ -3,12 +3,12 @@
 Menggunakan esp32 untuk mendrive panel P5 
 
 ### Format tampilan :
-```
+_____________________________
 01:23:45 WIB
 01:23:45 WIS
 IMSAK/TAFAWUTS -03:21 MENIT
 -01:23:45
-```
+_____________________________
 
 Untuk driver Panel P5 dan memakai PIN sesuai Shield JWS Kholifah esp32 30 pin
 1. [Matrix RGB Display](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA) v3.0.13
