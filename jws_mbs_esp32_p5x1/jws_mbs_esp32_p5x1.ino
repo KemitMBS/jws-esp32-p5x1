@@ -1,11 +1,15 @@
 #include "config_hw.h"
+#include "hijri.h"
 
-// --- 1. Deklarasi Variabel Global ---
+// --- Deklarasi Variabel Global ---
 MatrixPanel_I2S_DMA *matrix = nullptr;
 RTC_DS3231 rtc;
 PrayerTimes* pt = nullptr;
 BluetoothSerial SerialBT;
 Preferences pref;
+Hijriyah hijriConverter;
+
+int hijriCorrection = 0;          // koreksi manual Hijriyah
 
 int NIH = 2; 
 float currentLat = -6.9672, currentLon = 109.0650; 
@@ -16,21 +20,24 @@ double pMnt[8];
 long globalTafSec = 0;
 int nextEventIdx = 0;
 long nextEventSec = 0;
-int detikLalu = -1; // Berubah dari menitLalu ke detikLalu agar tampilan "hidup"
+int detikLalu = -1;
 String pNama[] = {"IMSAK","SUBUH","TERBIT","DHUHA","DZUHUR","ASHAR","MAGHRIB","ISYA"};
+String masehiDate = "01/01/26";
+String hijriDate = "01/01/1447";
 
-// --- 2. Include Header (WAJIB di bawah variabel global) ---
+bool showDateMode = false;
+unsigned long lastModeChange = 0;
+
 #include "engine.h"
 #include "display.h"
 #include "serial.h"
 
-// --- 3. Setup ---
 void setup() {
     Serial.begin(115200);
     SerialBT.begin("JWS-MBS-REV");
 
-    // Load data dari memori ESP32
     pref.begin("jws_mbs", true);
+    hijriCorrection = pref.getInt("hijri_corr", 0);
     currentLat = pref.getFloat("lat", -6.9672);
     currentLon = pref.getFloat("lon", 109.0650);
     NIH = pref.getInt("nih", 2);
@@ -41,7 +48,6 @@ void setup() {
     }
     pref.end();
 
-    // Inisialisasi Panel LED
     HUB75_I2S_CFG mxConfig(WIDTH, HEIGHT, CHAIN);
     mxConfig.gpio.r1=R1_PIN; mxConfig.gpio.g1=G1_PIN; mxConfig.gpio.b1=B1_PIN;
     mxConfig.gpio.r2=R2_PIN; mxConfig.gpio.g2=G2_PIN; mxConfig.gpio.b2=B2_PIN;
@@ -49,39 +55,57 @@ void setup() {
     mxConfig.gpio.d=D_PIN;   mxConfig.gpio.e=E_PIN;
     mxConfig.gpio.clk=CLK_PIN; mxConfig.gpio.lat=LAT_PIN; mxConfig.gpio.oe=OE_PIN;
     mxConfig.driver=HUB75_I2S_CFG::FM6126A;
+    mxConfig.double_buff = true;
 
     matrix = new MatrixPanel_I2S_DMA(mxConfig);
     matrix->begin();
     matrix->setBrightness8(10);
 
-    // Inisialisasi Waktu & Jadwal
     rtc.begin();
-    initPrayerObject(); // Dari engine.h
+    initPrayerObject();
     updateJadwal(rtc.now());
 
-    // Setup Buzzer
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, LOW); // Pastikan mati saat awal
+    digitalWrite(BUZZER_PIN, LOW);
+
+    showDateMode = false;
+    lastModeChange = millis();
 }
 
-// --- 4. Loop Utama ---
 void loop() {
     DateTime now = rtc.now();
-    
-    // Cek Bluetooth/Serial Command setiap saat
+    unsigned long nowMs = millis();
+
     handleSerial(now);
-    
-    // Refresh Tampilan setiap DETIK agar format HH:MM:SS IB berjalan
-    if(now.second() != detikLalu) {
-        checkNextEvent(now);    // Update hitung mundur
-        drawLayout();           // matrix->fillScreen(0)
-        showClock(now);         // Tampilkan Baris 1-4 (WIB, WIS, Event, Countdown)
-        
-        // Update jadwal harian tepat jam 00:00:00
-        if(now.hour() == 0 && now.minute() == 0 && now.second() == 0) {
+
+    static int lastSecond = -1;
+    if (now.second() != lastSecond) {
+        updateDates(now);
+        lastSecond = now.second();
+    }
+
+    const unsigned long JAM_DURASI   = 25000;
+    const unsigned long TANGGAL_DURASI = 5000;
+
+    if (!showDateMode && (nowMs - lastModeChange >= JAM_DURASI)) {
+        showDateMode = true;
+        lastModeChange = nowMs;
+    } else if (showDateMode && (nowMs - lastModeChange >= TANGGAL_DURASI)) {
+        showDateMode = false;
+        lastModeChange = nowMs;
+    }
+
+    if (now.second() != detikLalu) {
+        checkNextEvent(now);
+        showClock(now);
+        matrix->flipDMABuffer();
+        matrix->clearScreen();
+        delay(1);
+
+        if (now.hour() == 0 && now.minute() == 0 && now.second() == 0) {
             updateJadwal(now);
         }
-        
+
         detikLalu = now.second();
     }
 }
