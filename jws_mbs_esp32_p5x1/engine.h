@@ -2,23 +2,26 @@
 #define ENGINE_H
 
 #include "config_hw.h"
-#include "SolarCalculator.h" // Pastikan library ini sudah terinstall
+#include "SolarCalculator.h"
 
-// Variabel Global (Didefinisikan di .ino)
+// Deklarasi variabel global dari main.ino (agar bisa diakses di sini)
+extern PrayerTimes* pt;
+extern float currentLat, currentLon;
+extern int NIH;
+extern int kws[8];
+extern double pMnt[8];
+extern long globalTafSec;
+extern int nextEventIdx;
+extern long nextEventSec;
 extern float duhaAngle;
 extern int imsakOffset;
 
 void initPrayerObject() {
     if (pt != nullptr) delete pt;
     
-    // Constructor v2.1: (latitude, longitude, timezoneOffsetMinutes)
     pt = new PrayerTimes(currentLat, currentLon, 420); 
-    
-    // Set standar perhitungan Indonesia
     pt->setCalculationMethod(CalculationMethods::INDONESIA);
     pt->setAsrMethod(SHAFII);
-    
-    // Parameter Khusus v2.1
     pt->setImsakOffset(imsakOffset); 
     pt->setDuhaAngle(duhaAngle);
 }
@@ -26,13 +29,11 @@ void initPrayerObject() {
 void updateJadwal(DateTime now) {
     if (!pt) return;
 
-    // 1. Kalkulasi Jadwal Sholat (PrayerTimes v2.1)
     PrayerTimesResult result = pt->calculate(now.day(), now.month(), now.year());
     
     if(result.valid) {
-        // Mapping hasil ke array pMnt (ditambah KWS & NIH)
-        pMnt[0] = result.imsak + kws[0]; // KWS adalah koreksi waktu sholat           
-        pMnt[1] = result.fajr + kws[1] + NIH; // NIH adalah Nilai ihtiyat watu sholat
+        pMnt[0] = result.imsak + kws[0];           
+        pMnt[1] = result.fajr + kws[1] + NIH;      
         pMnt[2] = result.sunrise + kws[2];         
         pMnt[3] = result.duha + kws[3];            
         pMnt[4] = result.dhuhr + kws[4] + NIH;     
@@ -43,15 +44,8 @@ void updateJadwal(DateTime now) {
         Serial.println("Gagal menghitung jadwal: " + String(result.errorMessage));
     }
 
-    // 2. Kalkulasi Koreksi Waktu Istiwa (WIS) menggunakan SolarCalculator
-    // Algoritma Jean Meeus untuk akurasi tinggi
     double eot;
     calcEquationOfTime(now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(), eot);
-    
-    // globalTafSec (dalam detik) = (Selisih Bujur + Equation of Time)
-    // (currentLon - 105.0) * 4.0 adalah selisih menit bujur
-    // eot adalah perataan waktu dalam menit
-    // Hasil dikali 60.0 untuk mendapatkan total detik presisi
     globalTafSec = round(((currentLon - 105.0) * 4.0 + eot) * 60.0);
     
     Serial.print("WIS Offset (detik): ");
@@ -75,6 +69,5 @@ void checkNextEvent(DateTime now) {
         nextEventSec = (long)(pMnt[0] * 60) - wibSec + 86400L; 
     }
 }
-
 
 #endif
